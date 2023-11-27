@@ -1,0 +1,301 @@
+Resources:
+  EFSFileSystem:
+    Type: AWS::EFS::FileSystem
+    Properties:
+      BackupPolicy:
+        Status: ENABLED
+      PerformanceMode: maxIO
+      Encrypted: true
+      LifecyclePolicies:
+        - TransitionToIA: AFTER_30_DAYS      
+      FileSystemTags:
+      - Key: Name
+        Value: demoefs
+  EFSMountTargetAZ1:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId:
+        Ref: EFSFileSystem
+      SubnetId: subnet-08992cc67c62e000c
+      SecurityGroups:
+      - sg-0d559b86a54f5749c
+  EFSMountTargetAZ2:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId:
+        Ref: EFSFileSystem
+      SubnetId: subnet-022975068805416f1
+      SecurityGroups:
+      - sg-0d559b86a54f5749c
+  EFSMountTargetAZ3:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId:
+        Ref: EFSFileSystem
+      SubnetId: subnet-0515cb4eea248eac4
+      SecurityGroups:
+      - sg-0d559b86a54f5749c
+
+  
+  ApplicationLoadBalancer:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Properties:
+      SecurityGroups:
+        - sg-01f3c3f912cccd066
+      Subnets:
+        - subnet-09c2633d06aa0a90d
+        - subnet-00d21b206bf0092b4
+        - subnet-0177e5c22406506e1
+
+  TargetGroup:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      HealthCheckIntervalSeconds: '30'
+      HealthCheckTimeoutSeconds: '5'
+      Port: '80'
+      Protocol: HTTP
+      VpcId: vpc-04b5d850af50ee7b6
+  
+
+  MyListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 80
+      Protocol: HTTP
+      
+      
+  Parameter1:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Name: '/A4L/Wordpress/DBUser'
+      Description: 'Wordpress Database User'
+      Type: 'String'
+      Value: 'a4lwordpressuser'
+      Tier: 'Standard'
+  
+  Parameter2:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Name: '/A4L/Wordpress/DBName'
+      Description: 'Wordpress Database Name'
+      Type: 'String'
+      Value: 'a4lwordpressdb'
+      Tier: 'Standard'
+
+  Parameter3:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Name: '/A4L/Wordpress/DBEndpoint'
+      Description: 'Wordpress Database Endpoint'
+      Type: 'String'
+      Value: 'localhost'
+      Tier: 'Standard'
+
+  Parameter4:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Name: '/A4L/Wordpress/DBPassword'
+      Description: 'Wordpress Database Password'
+      Type: 'SecureString'
+      Value: '4n1m4l54L1f3'
+      Tier: 'Standard'
+
+  Parameter5:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Name: '/A4L/Wordpress/DBRootPassword'
+      Description: 'Wordpress Database RootPassword'
+      Type: 'SecureString'
+      Value: '4n1m4l54L1f3'
+      Tier: 'Standard'
+
+  Parameter6:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Name: '/A4L/Wordpress/EFSFSID'
+      Description: 'File System ID for Wordpress Content (wp-content)'
+      Type: 'String'
+      Value: 'fs-0d3618b4297f93202.efs.us-east-1.amazonaws.com'
+      Tier: 'Standard'
+
+  Parameter7:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Name: '/A4L/Wordpress/ALBDNSNAME'
+      Description: 'DNS Name of the Application Load Balancer for wordpress'
+      Type: 'String'
+   #   Value: !GetAtt ApplicationLoadBalancer.DNSName
+      Value: 'qwerty-Appli-hA79NP7moCGH-196343285.us-east-1.elb.amazonaws.com'
+      Tier: 'Standard'
+  LaunchTemplate:
+    Type: 'AWS::EC2::LaunchTemplate'
+    Properties:
+      LaunchTemplateName: LaunchTemplate7
+      LaunchTemplateData:
+        NetworkInterfaces:
+          - DeviceIndex: 0
+            AssociatePublicIpAddress: true
+            DeleteOnTermination: true
+            Groups:
+              - sg-081ad35802c524abd
+        ImageId: ami-0230bd60aa48260c6
+        InstanceType: t2.micro
+        UserData:
+          'Fn::Base64': !Sub |
+            #!/bin/bash -xe
+
+            sudo su
+
+            EFSFSID=$(aws ssm get-parameters --region us-east-1 --names /A4L/Wordpress/EFSFSID --query Parameters[0].Value)
+            EFSFSID=`echo $EFSFSID | sed -e 's/^"//' -e 's/"$//'`
+
+            ALBDNSNAME=$(aws ssm get-parameters --region us-east-1 --names /A4L/Wordpress/ALBDNSNAME --query Parameters[0].Value)
+            ALBDNSNAME=`echo $ALBDNSNAME | sed -e 's/^"//' -e 's/"$//'`
+
+            DBPassword=$(aws ssm get-parameters --region us-east-1 --names /A4L/Wordpress/DBPassword --with-decryption --query Parameters[0].Value)
+            DBPassword=`echo $DBPassword | sed -e 's/^"//' -e 's/"$//'`
+
+            DBRootPassword=$(aws ssm get-parameters --region us-east-1 --names /A4L/Wordpress/DBRootPassword --with-decryption --query Parameters[0].Value)
+            DBRootPassword=`echo $DBRootPassword | sed -e 's/^"//' -e 's/"$//'`
+
+            DBUser=$(aws ssm get-parameters --region us-east-1 --names /A4L/Wordpress/DBUser --query Parameters[0].Value)
+            DBUser=`echo $DBUser | sed -e 's/^"//' -e 's/"$//'`
+
+            DBName=$(aws ssm get-parameters --region us-east-1 --names /A4L/Wordpress/DBName --query Parameters[0].Value)
+            DBName=`echo $DBName | sed -e 's/^"//' -e 's/"$//'`
+
+            DBEndpoint=$(aws ssm get-parameters --region us-east-1 --names /A4L/Wordpress/DBEndpoint --query Parameters[0].Value)
+            DBEndpoint=`echo $DBEndpoint | sed -e 's/^"//' -e 's/"$//'`
+
+            yum -y update
+
+            yum install wget php-mysqlnd httpd php-fpm php-mysqli mariadb105-server php-json php php-devel stress amazon-efs-utils -y
+
+            systemctl enable httpd
+            systemctl enable mariadb
+            systemctl start httpd
+            systemctl start mariadb
+
+            mysqladmin -u root password $DBRootPassword
+
+            mkdir -p /var/www/html/wp-content
+            chown -R ec2-user:apache /var/www/
+            echo -e "$EFSFSID:/ /var/www/html/wp-content efs _netdev,tls,iam 0 0" >> /etc/fstab
+            mount -a -t efs defaults
+
+            wget http://wordpress.org/latest.tar.gz -P /var/www/html
+            cd /var/www/html
+            tar -zxvf latest.tar.gz
+            cp -rvf wordpress/* .
+            rm -R wordpress
+            rm latest.tar.gz
+
+            sudo cp ./wp-config-sample.php ./wp-config.php
+            sed -i "s/'database_name_here'/'$DBName'/g" wp-config.php
+            sed -i "s/'username_here'/'$DBUser'/g" wp-config.php
+            sed -i "s/'password_here'/'$DBPassword'/g" wp-config.php
+            sed -i "s/'localhost'/'$DBEndpoint'/g" wp-config.php
+
+            usermod -a -G apache ec2-user   
+            chown -R ec2-user:apache /var/www
+            chmod 2775 /var/www
+            find /var/www -type d -exec chmod 2775 {} \;
+            find /var/www -type f -exec chmod 0664 {} \;
+
+            echo "CREATE DATABASE $DBName;" >> /tmp/db.setup
+            echo "CREATE USER '$DBUser'@'localhost' IDENTIFIED BY '$DBPassword';" >> /tmp/db.setup
+            echo "GRANT ALL ON $DBName.* TO '$DBUser'@'localhost';" >> /tmp/db.setup
+            echo "FLUSH PRIVILEGES;" >> /tmp/db.setup
+            mysql -u root --password=$DBRootPassword < /tmp/db.setup
+            rm /tmp/db.setup
+
+
+            cat >> /home/ec2-user/update_wp_ip.sh<< 'EOF'
+            #!/bin/bash
+            source <(php -r 'require("/var/www/html/wp-config.php"); echo("DB_NAME=".DB_NAME."; DB_USER=".DB_USER."; DB_PASSWORD=".DB_PASSWORD."; DB_HOST=".DB_HOST); ')
+            SQL_COMMAND="mysql -u $DB_USER -h $DB_HOST -p$DB_PASSWORD $DB_NAME -e"
+            OLD_URL=$(mysql -u $DB_USER -h $DB_HOST -p$DB_PASSWORD $DB_NAME -e 'select option_value from wp_options where option_id = 1;' | grep http)
+
+            ALBDNSNAME=$(aws ssm get-parameters --region us-east-1 --names /A4L/Wordpress/ALBDNSNAME --query Parameters[0].Value)
+            ALBDNSNAME=`echo $ALBDNSNAME | sed -e 's/^"//' -e 's/"$//'`
+
+            $SQL_COMMAND "UPDATE wp_options SET option_value = replace(option_value, '$OLD_URL', 'http://$ALBDNSNAME') WHERE option_name = 'home' OR option_name = 'siteurl';"
+            $SQL_COMMAND "UPDATE wp_posts SET guid = replace(guid, '$OLD_URL','http://$ALBDNSNAME');"
+            $SQL_COMMAND "UPDATE wp_posts SET post_content = replace(post_content, '$OLD_URL', 'http://$ALBDNSNAME');"
+            $SQL_COMMAND "UPDATE wp_postmeta SET meta_value = replace(meta_value,'$OLD_URL','http://$ALBDNSNAME');"
+            EOF
+
+            chmod 755 /home/ec2-user/update_wp_ip.sh
+            echo "/home/ec2-user/update_wp_ip.sh" >> /etc/rc.local
+            /home/ec2-user/update_wp_ip.sh
+
+
+
+
+    
+  AutoScalingGroup:
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref LaunchTemplate
+        Version: !GetAtt LaunchTemplate.LatestVersionNumber
+      MaxSize: '2'
+      MinSize: '1'
+      DesiredCapacity: '1'
+      VPCZoneIdentifier:
+        - subnet-09c2633d06aa0a90d
+        - subnet-00d21b206bf0092b4
+        - subnet-0177e5c22406506e1
+
+  MyAutoScalingAttachment:
+    Type: 'AWS::AutoScaling::Attachment'
+    Properties:
+      AutoScalingGroupName: !Ref AutoScalingGroup
+      TargetGroupARN: !Ref TargetGroup
+   
+  ScalingPolicy:
+    Type: 'AWS::AutoScaling::ScalingPolicy'
+    Properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName: !Ref AutoScalingGroup
+      ScalingAdjustment: '1'
+  
+  CloudWatchAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      EvaluationPeriods: '1'
+      Statistic: Average
+      Threshold: '50'
+      AlarmDescription: Alarm set fo 50% of CPU utilization
+      Period: '60'
+      AlarmActions:
+        - !Ref ScalingPolicy
+      Namespace: AWS/EC2
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value:
+            Ref: AutoScalingGroup
+      ComparisonOperator: GreaterThanThreshold
+      MetricName: CPUUtilization
+      
+Outputs:
+  ElasticFileSystem:
+    Description: Elastic file system.
+    Value:
+      Ref: EFSFileSystem
+  EFSMountTargetAZ1Id:
+    Description: EFS mount target Id in availability zone 1.
+    Value:
+      Ref: EFSMountTargetAZ1
+  EFSMountTargetAZ2Id:
+    Description: EFS mount target Id in availability zone 2.
+    Value:
+      Ref: EFSMountTargetAZ2
+  EFSMountTargetAZ3Id:
+    Description: EFS mount target Id in availability zone .
+    Value:
+      Ref: EFSMountTargetAZ3
